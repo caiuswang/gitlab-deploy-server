@@ -4,6 +4,7 @@ import { DeployService } from "../services/deploy";
 import { GitLabApi } from "../gitlab";
 import { NewFullDeploy } from "../models";
 import { z } from "zod";
+import { createLogger } from "../logger";
 
 const router = Router();
 const queryService = new QueryService();
@@ -14,14 +15,14 @@ router.get("/", (_req, res) => {
   res.json({ ok: true, service: "ts-deploy-server" });
 });
 
-router.get("/deploys", (_req, res) => {
-  const list = queryService.getAllDeployInfoPage(0, 50);
+router.get("/deploys", async(_req, res) => {
+  const list = await queryService.getAllDeployInfoPage(0, 50);
   res.json(list);
 });
 
-router.get("/deploy/:id", (req, res) => {
+router.get("/deploy/:id", async(req, res) => {
   const id = Number(req.params.id);
-  const one = queryService.getDeployDetail(id);
+  const one = await queryService.getDeployDetail(id);
   if (!one) return res.status(404).json({ error: "Not found" });
   res.json(one);
 });
@@ -71,14 +72,14 @@ function toNewFullDeploy(input: RawNewFullDeploy): NewFullDeploy {
   };
 }
 
-router.post("/deploy/create", (req, res) => {
+router.post("/deploy/create", async (req, res) => {
   const parsed = newFullDeploySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.message });
   }
   try {
     const payload: NewFullDeploy = toNewFullDeploy(parsed.data); 
-    const id = deployService.addFullDeploy(payload);
+    const id = await deployService.addFullDeploy(payload);
     res.json({ id });
   } catch (e: any) {
     res.status(400).json({ id: -1, error: e.message });
@@ -124,11 +125,11 @@ router.post("/deploy/retry", async (req, res) => {
   }
 });
 
-router.post("/deploy/copy", (req, res) => {
+router.post("/deploy/copy", async(req, res) => {
   const { from_id, description } = req.body || {};
   if (typeof from_id !== "number") return res.status(400).json({ id: -1 });
   try {
-    const id = deployService.copyDeployFromOld(from_id, description);
+    const id = await deployService.copyDeployFromOld(from_id, description);
     res.json({ id });
   } catch (e: any) {
     res.status(400).json({ id: -1, error: e.message });
@@ -139,13 +140,14 @@ router.post("/deploy/re_deploy", (_req, res) => {
   res.status(501).json({ ok: false, message: "Not implemented yet" });
 });
 
-router.post("/deploy/cancel", (_req, res) => {
-  const { deploy_id } = _req.body || {};
+router.post("/deploy/cancel", async(_req, res) => {
+  const deploy_id = Number(_req.body?.id);
   if (typeof deploy_id !== "number") return res.status(400).json({ id : -1 });
   try {
-    deployService.cancelDeploy(deploy_id);
+    await deployService.cancelDeploy(deploy_id);
     res.json({ ok: true });
   } catch (e: any) {
+    createLogger({ deploy_id }).error(`Cancel deploy error: ${e.message}`);
     res.status(400).json({ ok: false, error: e.message });
   }
 });

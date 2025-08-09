@@ -9,26 +9,26 @@ const queryService = new QueryService();
 const projectService = new ProjectService();
 const gitlab = new GitLabApi();
 
-router.get("/projects", (_req, res) => {
+router.get("/projects", async(_req, res) => {
   // Align default group id with your Rust default (e.g., 75 in server.rs)
   const groupId = Number(_req.query.group_id ?? 75);
-  const projects = queryService.getAllProjectsByGroupId(groupId);
+  const projects = await queryService.getAllProjectsByGroupId(groupId);
   res.json(projects);
 });
 
-router.delete("/project/:id", (req, res) => {
+router.delete("/project/:id", async(req, res) => {
   const id = Number(req.params.id);
-  const ok = projectService.deleteProject(id);
+  const ok = await projectService.deleteProject(id);
   if (ok) return res.json({ ok: true });
   res.status(400).json({ ok: false });
 });
 
-router.post("/project/:id", (req, res) => {
+router.post("/project/:id", async(req, res) => {
   const id = Number(req.params.id);
   const schema = z.object({ alias: z.string() });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: parsed.error.message });
-  const ok = projectService.updateProjectAlias(id, parsed.data.alias);
+  const ok = await projectService.updateProjectAlias(id, parsed.data.alias);
   if (ok) return res.json({ ok: true });
   res.status(400).json({ ok: false });
 });

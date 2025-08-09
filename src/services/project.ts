@@ -1,16 +1,19 @@
-import { db } from "../db";
+import { db, prisma } from "../db";
 
 export class ProjectService {
-  deleteProject(id: number): boolean {
-    const stmt = db.prepare("DELETE FROM project_info WHERE id = ?");
-    const info = stmt.run(id);
-    return info.changes > 0;
+  async deleteProject(id: number): Promise<boolean> {
+    const info = await prisma.project_info.delete({
+      where: { id },
+    });
+    return info ? true : false;
   }
 
-  updateProjectAlias(id: number, alias: string): boolean {
+  async updateProjectAlias(id: number, alias: string): Promise<boolean> {
     // If alias column differs, adjust.
-    const stmt = db.prepare("UPDATE project_info SET alias = ? WHERE id = ?");
-    const info = stmt.run(alias, id);
-    return info.changes > 0;
+    const info = await prisma.project_info.update({
+      where: { id },
+      data: { alias },
+    });
+    return info ? true : false;
   }
 }

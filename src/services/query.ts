@@ -1,51 +1,56 @@
-import { db } from "../db";
+import { db, prisma } from "../db";
 import { DeployInfo, ProjectInfo } from "../models";
 
 export class QueryService {
-  getAllDeployInfoPage(offset = 0, limit = 50): DeployInfo[] {
-    const stmt = db.prepare(
-      "SELECT * FROM deploy_info ORDER BY id DESC LIMIT ? OFFSET ?"
-    );
-    return stmt.all(limit, offset) as DeployInfo[];
+  async getAllDeployInfoPage(offset = 0, limit = 50): Promise<DeployInfo[]> {
+    const deploys = await prisma.deploy_info.findMany({
+      orderBy: { id: "desc" },
+      skip: offset,
+      take: limit,
+    });
+    return deploys as DeployInfo[];
   }
 
-  getDeployInfo(id: number): DeployInfo | undefined {
-    const stmt = db.prepare("SELECT * FROM deploy_info WHERE id = ?");
-    return stmt.get(id) as DeployInfo | undefined;
+  async getDeployInfo(id: number): Promise<DeployInfo | null> {
+    return prisma.deploy_info.findUnique({
+      where: { id },
+    }) as Promise<DeployInfo | null>;
   }
 
-  getDeployDetail(deployId: number) {
-    const deploy = db
-      .prepare("SELECT * FROM deploy_info WHERE id = ?")
-      .get(deployId) as any | undefined;
+  async getDeployDetail(deployId: number) : Promise<{
+    id: number;
+    status: string;
+    description?: string;
+    deploy: DeployInfo;
+    groups: any[];
+    projects: any[];
+    pipelines: any[];
+    jobs: any[];
+    groupsDetailed: any[];
+  } | undefined> {
+    const deploy = await prisma.deploy_info.findUnique({
+      where: { id: deployId },
+    });
     if (!deploy) return undefined;
 
-    const groups = db
-      .prepare(
-        "SELECT * FROM group_deploy_depend WHERE deploy_id = ? ORDER BY group_index ASC, id ASC"
-      )
-      .all(deployId) as any[];
+    const groups = await prisma.group_deploy_depend.findMany({
+      where: { deploy_id: deployId },
+      orderBy: [{ group_index: "asc"}, {id: "asc" }],
+    });
+    const projects = await prisma.singe_project_deploy_info.findMany({
+      where: { deploy_id: deployId },
+      orderBy: [{ group_index: "asc"}, {id: "asc" }],
+    });
 
-    const projects = db
-      .prepare(
-        "SELECT * FROM singe_project_deploy_info WHERE deploy_id = ? ORDER BY group_index ASC, id ASC"
-      )
-      .all(deployId) as any[];
+    const pipelines = await prisma.pipeline_info.findMany({
+      where: { deploy_id: deployId },
+      orderBy: { id: "asc" },
+    });
 
-    const pipelines = db
-      .prepare(
-        "SELECT * FROM pipeline_info WHERE deploy_id = ? ORDER BY id ASC"
-      )
-      .all(deployId) as any[];
-
-    let jobs: any[] = [];
-    try {
-      jobs = db
-        .prepare("SELECT * FROM job WHERE deploy_id = ? ORDER BY id ASC")
-        .all(deployId) as any[];
-    } catch {
-      jobs = [];
-    }
+    const jobs = await prisma.job.findMany({
+      where: { deploy_id: deployId },
+      orderBy: { id: "asc" },
+    });
 
     const groupsDetailed = groups.map((g) => ({
       ...g,
@@ -53,6 +58,9 @@ export class QueryService {
     }));
 
     return {
+      id: deploy.id,
+      status: deploy.status,
+      description: deploy.description,
       deploy,
       groups,
       projects,
@@ -62,11 +70,22 @@ export class QueryService {
     };
   }
 
-  getAllProjectsByGroupId(groupId: number): ProjectInfo[] {
-    // If `group_id` column differs, adjust query accordingly.
-    const stmt = db.prepare(
-      "SELECT * FROM project_info WHERE group_id = ? ORDER BY id ASC"
-    );
-    return stmt.all(groupId) as ProjectInfo[];
+  async getAllProjectsByGroupId(groupId: number): Promise<ProjectInfo[]> {
+    const projects = await prisma.project_info.findMany({
+      where: { group_id: groupId },
+      orderBy: { id: "asc" },
+    });
+    // Map database result to ProjectInfo interface
+    return projects.map((p) => ( {
+      id: p.id,
+      project_id: p.id, // or use p.project_id if available in DB
+      group_id: p.group_id,
+      project_name: p.name,
+      alias: p.alias,
+      name: p.name,
+      full_path: p.full_path,
+      path: p.full_path,
+      // Add other fields if available in p
+    }));
   }
 }

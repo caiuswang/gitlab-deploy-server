@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model diesel_schema_migrations {
+  version String   @id
+  run_on  DateTime @default(now())
+
+  @@map("__diesel_schema_migrations")
+}
+
+model deploy_info {
+  id          Int    @id @default(autoincrement())
+  status      String
+  body        String
+  description String
+}
+
+model group_deploy_depend {
+  id                 Int     @id @default(autoincrement())
+  deploy_id          Int
+  group_index        Int
+  depend_group_index Int
+  depend_type        String?
+}
+
+model job {
+  id          Int    @id @default(autoincrement())
+  deploy_id   Int
+  project_id  Int
+  pipeline_id Int
+  stage       String
+  name        String
+  status      String
+  created_at  String
+  updated_at  String
+  web_url     String
+
+  @@index([deploy_id], map: "idx_job_deploy_id")
+}
+
+model pipeline_info {
+  id         Int    @id @default(autoincrement())
+  deploy_id  Int
+  project_id Int
+  status     String
+  user_name  String
+  created_at String
+  updated_at String
+}
+
+model project_info {
+  id          Int     @id @default(autoincrement())
+  group_id    Int
+  alias       String
+  name        String
+  full_path   String
+  description String?
+
+  @@index([group_id], map: "idx_project_info_group_id")
+}
+
+model singe_project_deploy_info {
+  id           Int     @id @default(autoincrement())
+  deploy_id    Int
+  group_index  Int
+  project_id   Int
+  project_name String
+  branch       String
+  tag_prefix   String
+  actual_tag   String?
+  pipeline_id  Int?
+  status       String
+}
