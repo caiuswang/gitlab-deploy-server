@@ -69,3 +69,12 @@ export interface NewFullDeploy {
   groups: NewGroupDeployDepend[];
   projects: NewSingleProjectDeployInfo[];
 }
+export interface GroupDeployChange {
+  deploy_id: number;
+  group_id?: number | null;
+  group_index: number;
+  depend_group_index?: number | null;
+  depend_type?: string | null;
+  description?: string;
+  projects: NewSingleProjectDeployInfo[];
+}

@@ -1,4 +1,4 @@
-import { NewFullDeploy } from "../../models";
+import { GroupDeployChange, NewFullDeploy, SingleProjectDeployInfo } from "../../models";
 import { GitLabApi } from "../../gitlab";
 import { createLogger } from "../../logger";
 import { prisma } from "../../db";
@@ -15,6 +15,93 @@ import { IDeployService, GroupDependType } from "./deploy.interface";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class GitLabDeployService implements IDeployService {
+  async changeDeployGroupInfo(payload: GroupDeployChange): Promise<void> {
+    const { deploy_id, group_id, group_index, depend_group_index, depend_type, projects } = payload;
+    let newProjects: any[] = [];
+    let updatedProjects: SingleProjectDeployInfo[] = [];
+    let removedProjects: SingleProjectDeployInfo[] = [];
+    if (projects && projects.length) {
+      const projectIds = projects.map(p => p.project_id);
+      const existingProjects = await prisma.singe_project_deploy_info.findMany({
+        where: { deploy_id: deploy_id }
+      });
+      for (const p of existingProjects) {
+        if (projectIds.includes(p.project_id)) {
+          updatedProjects.push(p);
+        } else {
+          removedProjects.push(p);
+        }
+      }
+      newProjects = projects.filter(p => !existingProjects.some(ep => ep.project_id === p.project_id));
+    } else {
+      removedProjects = await prisma.singe_project_deploy_info.findMany({
+        where: { deploy_id: deploy_id, group_index: group_index }
+      });
+    }
+    if (!group_id) {
+      const existGroup = await prisma.group_deploy_depend.findFirst({
+        where: { deploy_id: deploy_id, group_index: group_index }
+      });
+      if (existGroup) {
+        throw new Error(`Group with index ${group_index} already exists for deploy ${deploy_id}`);
+      }
+    }
+    await prisma.$transaction(async (tx) => {
+      if (!group_id) {
+        const newGroup = await tx.group_deploy_depend.create({
+          data: {
+            deploy_id: deploy_id,
+            group_index: group_index,
+            depend_group_index: depend_group_index ?? 0,
+            depend_type: depend_type ?? null
+          }
+        });
+        createLogger({ group_index, depend_group_index, depend_type }).info("Created new group deploy dependency", newGroup);
+      } else {
+        await tx.group_deploy_depend.update({
+          where: { id: group_id },
+          data: {
+            group_index: group_index,
+            depend_group_index: depend_group_index ?? 0,
+            depend_type: depend_type ?? null
+          }
+        });
+      }
+      if (newProjects.length) {
+        await tx.singe_project_deploy_info.createMany({
+          data: newProjects.map(p => ({
+            deploy_id: deploy_id,
+            group_index: group_index,
+            project_id: p.project_id,
+            project_name: p.project_name,
+            branch: p.branch,
+            tag_prefix: p.tag_prefix,
+            actual_tag: null,
+            pipeline_id: null,
+            status: "pending"
+          }))
+        });
+      }
+      if (updatedProjects.length) {
+        for (const p of updatedProjects) {
+          await tx.singe_project_deploy_info.update({
+            where: { id: p.id },
+            data: {
+              group_index: group_index,
+              branch: projects.find(pr => pr.project_id === p.project_id)?.branch ?? "",
+              tag_prefix: projects.find(pr => pr.project_id === p.project_id)?.tag_prefix ?? ""
+            }
+          });
+        }
+      }
+      if (removedProjects.length) {
+        const removeIds = removedProjects.map(p => p.id);
+        await tx.singe_project_deploy_info.deleteMany({
+          where: { id: { in: removeIds } }
+        });
+      }
+    }, { maxWait: 100000 });
+  }
   private log(ctx: Record<string, any>) { return createLogger(ctx); }
 
   async runDeploy(deployId: number, gitlabHost: string, token: string, scheme = "https") {
