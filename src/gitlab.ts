@@ -74,6 +74,7 @@ export class GitLabApi {
     });
     if (res.statusCode >= 400) {
       const { raw } = await this.handleJson(res);
+      createLogger({ projectId, branch, tagName }).error(`GitLab create tag ${res.statusCode} ${url} :: ${raw}`);
       throw new Error(`GitLab create tag ${res.statusCode} ${url} :: ${raw}`);
     }
     return tagName;

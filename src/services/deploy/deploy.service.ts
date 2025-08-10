@@ -44,7 +44,8 @@ export class GitLabDeployService implements IDeployService {
         try {
           this.log({ deployId, projectId: p.project_id }).info("Starting project deploy");
           await this.runOneProject(gitlab, p);
-        } catch {
+        } catch (e) {
+          this.log({ deployId, projectId: p.project_id, error: (e as Error).message }).error("Project deploy failed");
           await prisma.singe_project_deploy_info.update({ where: { id: p.id }, data: { status: "failed" } });
           await this.markDeployFailed(deployId);
           return;
