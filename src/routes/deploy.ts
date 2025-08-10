@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { QueryService } from "../services/query";
-import { DeployService } from "../services/deploy";
+import { GitLabDeployService } from "../services/deploy";
+import { IDeployService } from "../services/deploy";
 import { GitLabApi } from "../gitlab";
 import { NewFullDeploy } from "../models";
 import { z } from "zod";
@@ -8,7 +9,7 @@ import { createLogger } from "../logger";
 
 const router = Router();
 const queryService = new QueryService();
-const deployService = new DeployService();
+const deployService: IDeployService = new GitLabDeployService();
 const gitlab = new GitLabApi();
 
 router.get("/", (_req, res) => {

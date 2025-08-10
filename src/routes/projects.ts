@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { QueryService } from "../services/query";
-import { ProjectService } from "../services/project";
+import { PrismaProjectService } from "../services/project";
+import { IProjectService } from "../services/project";
 import { GitLabApi } from "../gitlab";
 import { z } from "zod";
 
 const router = Router();
 const queryService = new QueryService();
-const projectService = new ProjectService();
+const projectService: IProjectService = new PrismaProjectService();
 const gitlab = new GitLabApi();
 
 router.get("/projects", async(_req, res) => {
