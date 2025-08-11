@@ -191,20 +191,38 @@ export class GitLabDeployService implements IDeployService {
     }
     const jobs = await gitlab.getJobsByPipeline(project.project_id, pipelineId);
     for (const j of jobs) {
-      await prisma.job.createMany({
-        data: {
-          id: j.id,
-          deploy_id: project.deploy_id,
-          project_id: project.project_id,
-          pipeline_id: pipelineId,
-          name: j.name ?? "",
-          stage: j.stage ?? "",
-          status: j.status ?? "",
-          created_at: j.created_at ?? "",
-          updated_at: j.finished_at ?? j.updated_at ?? "",
-          web_url: j.web_url ?? ""
-        }
-      });
+      const existingJob = await prisma.job.findUnique({ where: { id: j.id } });
+      if (existingJob) {
+        await prisma.job.update({
+          where: { id: j.id },
+          data: {
+            deploy_id: project.deploy_id,
+            project_id: project.project_id,
+            pipeline_id: pipelineId,
+            name: j.name ?? "",
+            stage: j.stage ?? "",
+            status: j.status ?? "",
+            created_at: j.created_at ?? "",
+            updated_at: j.finished_at ?? j.updated_at ?? "",
+            web_url: j.web_url ?? ""
+          }
+        });
+      } else {
+        await prisma.job.create({
+          data: {
+            id: j.id,
+            deploy_id: project.deploy_id,
+            project_id: project.project_id,
+            pipeline_id: pipelineId,
+            name: j.name ?? "",
+            stage: j.stage ?? "",
+            status: j.status ?? "",
+            created_at: j.created_at ?? "",
+            updated_at: j.finished_at ?? j.updated_at ?? "",
+            web_url: j.web_url ?? ""
+          }
+        });
+      }
     }
   }
 
