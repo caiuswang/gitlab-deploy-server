@@ -4,8 +4,8 @@ import { createLogger } from "../../logger";
 
 export class PrismaProjectService implements IProjectService {
   async insertProject(project_id: number, project_name: string, group_id: number, path: string): Promise<void> {
-    createLogger({project_id : project_id, project_name: project_name})
-    .info("Insert project")
+    createLogger({ project_id: project_id, project_name: project_name })
+      .info("Inserting project")
     await prisma.project_info.create(
       {
         data: {
