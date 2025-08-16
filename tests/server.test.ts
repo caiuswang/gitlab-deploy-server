@@ -4,14 +4,17 @@ import { WebSocket } from "ws";
 import { createApp } from "../src/app";
 import { SERVER_PORT } from "../src/config";
 import { beforeAll, afterAll, expect, test } from "@jest/globals";
+import { BroadCastService, GitLabDeployService } from "../src/services/deploy";
 
-let server: ReturnType<typeof createServer>;
+let server: ReturnType<any>;
 let wss: WebSocketServer;
 
 beforeAll((done) => {
-  const app = createApp();
+  // Set up WebSocket server
+  wss = new WebSocketServer({ noServer: true });
+  const gitlabDeployService = new GitLabDeployService(new BroadCastService(wss));
+  const app = createApp(gitlabDeployService);
   server = createServer(app);
-
   // Set up WebSocket server
   wss = new WebSocketServer({ server });
   wss.on("connection", (ws, req) => {

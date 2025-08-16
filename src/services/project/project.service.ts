@@ -3,6 +3,21 @@ import { IProjectService } from "./project.interface";
 import { createLogger } from "../../logger";
 
 export class PrismaProjectService implements IProjectService {
+  async insertProject(project_id: number, project_name: string, group_id: number, path: string): Promise<void> {
+    createLogger({project_id : project_id, project_name: project_name})
+    .info("Insert project")
+    await prisma.project_info.create(
+      {
+        data: {
+          id: project_id,
+          group_id: group_id,
+          name: project_name,
+          alias: project_name,
+          full_path: path,
+        }
+      }
+    )
+  }
   private log(ctx: Record<string, any>) { return createLogger({ service: "ProjectService", ...ctx }); }
 
   async deleteProject(id: number): Promise<boolean> {

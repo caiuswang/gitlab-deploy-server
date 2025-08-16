@@ -10,3 +10,7 @@ export interface IDeployService {
   copyDeployFromOld(fromId: number, description?: string): Promise<number>;
   cancelDeploy(deployId: number): Promise<void>;
 }
+export interface IBroadCast {
+// Broadcast function for deploy updates
+  broadcastDeployUpdate(deployId: number, event: any) : void;
+}

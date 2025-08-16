@@ -17,12 +17,27 @@ router.get("/projects", async(_req, res) => {
   res.json(projects);
 });
 
+const newProjectRequest = z.object({
+  project_id : z.number(),
+  group_id: z.number(),
+  project_name: z.string(),
+  alias: z.string(),
+  path: z.string()
+})
+
 router.delete("/project/:id", async(req, res) => {
   const id = Number(req.params.id);
   const ok = await projectService.deleteProject(id);
   if (ok) return res.json({ ok: true });
   res.status(400).json({ ok: false });
 });
+router.put("/project", async (req,res) => {
+  const parsed = newProjectRequest.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+  const {project_id, group_id, project_name, alias, path} = parsed.data;
+  await projectService.insertProject(project_id, project_name, group_id, path);
+  return res.json({ok:true});
+})
 
 router.post("/project/:id", async(req, res) => {
   const id = Number(req.params.id);

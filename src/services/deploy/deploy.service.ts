@@ -2,6 +2,7 @@ import { GroupDeployChange, NewFullDeploy, SingleProjectDeployInfo } from "../..
 import { GitLabApi } from "../../gitlab";
 import { createLogger } from "../../logger";
 import { prisma } from "../../db";
+import { SERVER_PORT } from "../../config"
 import {
   MAX_POLL_ROUNDS,
   POLL_INTERVAL_MS,
@@ -10,11 +11,17 @@ import {
   MAX_DEPEND_ROUNDS,
   WAIT_DEPEND_INTERVAL_MS
 } from "./deploy.constants";
-import { IDeployService, GroupDependType } from "./deploy.interface";
+import { IDeployService, GroupDependType, IBroadCast} from "./deploy.interface";
+import { WebSocketServer } from "ws";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class GitLabDeployService implements IDeployService {
+  broadCastService : IBroadCast;
+
+  constructor(broadcast : IBroadCast) {
+    this.broadCastService = broadcast;
+  }
   async changeDeployGroupInfo(payload: GroupDeployChange): Promise<void> {
     const { deploy_id, group_id, group_index, depend_group_index, depend_type, projects } = payload;
     let newProjects: any[] = [];
@@ -56,7 +63,7 @@ export class GitLabDeployService implements IDeployService {
             depend_type: depend_type ?? null
           }
         });
-        createLogger({ group_index, depend_group_index, depend_type }).info("Created new group deploy dependency", newGroup);
+        createLogger({ group_index, depend_group_index, depend_type }).info("Created new group deploy dependency");
       } else {
         await tx.group_deploy_depend.update({
           where: { id: group_id },
@@ -398,5 +405,27 @@ export class GitLabDeployService implements IDeployService {
   async cancelDeploy(deployId: number) {
       await prisma.deploy_info.update({ where: { id: deployId }, data: { status: "canceled" } });
       await prisma.singe_project_deploy_info.updateMany({ where: { deploy_id: deployId }, data: { status: "canceled" } });
+  }
+}
+
+export class BroadCastService implements IBroadCast {
+
+  wss: WebSocketServer;
+
+  constructor(wss: WebSocketServer) {
+    this.wss = wss;
+  }
+
+  broadcastDeployUpdate(deployId: number, event: any) {
+    const message = JSON.stringify(event);
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === client.OPEN) {
+        const url = new URL(client.url || "", `http://localhost:${SERVER_PORT}`);
+        const endpoint = url.pathname;
+        if (endpoint === `/ws/deploy/${deployId}`) {
+          client.send(message);
+        }
+      }
+    });
   }
 }

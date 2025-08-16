@@ -1,7 +1,6 @@
 import express from "express";
 import deployRoutes from "./routes/deploy";
 import projectRoutes from "./routes/projects";
-import { logger } from "./logger";
 import { GitLabDeployService } from "./services/deploy";
 
 export function createApp(deployService : GitLabDeployService) {

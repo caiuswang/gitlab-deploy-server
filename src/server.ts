@@ -4,17 +4,17 @@ import { createApp } from "./app";
 import { SERVER_PORT } from "./config";
 import deployRouter from "./routes/deploy";
 import projectRouter from "./routes/projects";
-import { GitLabDeployService } from "./services/deploy";
+import { BroadCastService, GitLabDeployService } from "./services/deploy";
 import { QueryService } from "./services/query";
-
-// Pass broadcast function to deploy service
-const deployService = new GitLabDeployService(broadcastDeployUpdate);
-const app = createApp(deployService);
-const server = createServer(app); // Create an HTTP server
-const queryService = new QueryService();
 
 // WebSocket server setup
 const wss = new WebSocketServer({ noServer: true }); // Use `noServer` to manually handle WebSocket upgrades
+
+// Pass broadcast function to deploy service
+const deployService = new GitLabDeployService(new BroadCastService(wss));
+const app = createApp(deployService);
+const server = createServer(app); // Create an HTTP server
+const queryService = new QueryService();
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url || "", `http://localhost:${SERVER_PORT}`);
