@@ -40,7 +40,6 @@ export interface PipelineInfo {
   id: number;
   deploy_id: number;
   project_id: number;
-  pipeline_id: number;
   status?: string;
   user_name?: string;
   created_at?: string;
@@ -77,4 +76,15 @@ export interface GroupDeployChange {
   depend_type?: string | null;
   description?: string;
   projects: NewSingleProjectDeployInfo[];
+}
+
+export interface NacosContent {
+  data_id: string,
+  group_id: string,
+  content : string,
+}
+
+export interface NacosRequest {
+  data_id: string,
+  group_id: string | null;
 }

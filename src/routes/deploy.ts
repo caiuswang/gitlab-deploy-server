@@ -5,6 +5,8 @@ import { GitLabApi } from "../gitlab";
 import { NewFullDeploy, GroupDeployChange } from "../models";
 import { z } from "zod";
 import { createLogger } from "../logger";
+import { buildSchema, GraphQLInt, GraphQLObjectType, GraphQLSchema, GraphQLNonNull, GraphQLString, GraphQLList } from 'graphql';
+import { createHandler } from 'graphql-http/lib/use/express';
 
 export default function deployRouter(deployService: IDeployService) {
   const router = Router();
@@ -14,6 +16,106 @@ export default function deployRouter(deployService: IDeployService) {
   router.get("/", (_req, res) => {
     res.json({ ok: true, service: "ts-deploy-server" });
   });
+
+  // Define DeployProject GraphQL type
+  const DeployProjectType = new GraphQLObjectType({
+    name: 'DeployProject',
+    fields: {
+      project_id: { type: GraphQLInt },
+      project_name: { type: GraphQLString },
+      branch: { type: GraphQLString },
+      tag_prefix: { type: GraphQLString },
+      actual_tag: { type: GraphQLString},
+      pipeline_id: { type: GraphQLInt }
+    }
+  });
+  const DeployPipelineType = new GraphQLObjectType({
+    name: 'DeployPipeline',
+    fields: {
+      id: { type: GraphQLInt },
+      deploy_id: { type: GraphQLInt },
+      project_id: { type: GraphQLInt },
+      pipeline_id: { type: GraphQLInt },
+      status: { type: GraphQLString },
+      user_name: { type: GraphQLString },
+      created_at: { type: GraphQLString },
+      updated_at: { type: GraphQLString },
+    }
+  });
+
+  const DeployGroupType = new GraphQLObjectType({
+    name: 'DeployGroup',
+    fields: {
+      group_index: { type: GraphQLInt },
+      depend_group_index: { type: GraphQLInt },
+      depend_type: { type: GraphQLString },
+    }
+  });
+  const DeployInfoType = new GraphQLObjectType({
+    name: 'Deploy',
+    fields: {
+      id : { type: GraphQLInt },
+      status: {type: GraphQLString },
+      description : { type: GraphQLString },
+    }
+  });
+
+  const DeployType = new GraphQLObjectType({
+    name: 'DeployDetail',
+    fields: {
+      id: { type: GraphQLInt },
+      status: { type: GraphQLString },
+      description: { type: GraphQLString },
+      created_at : { type: GraphQLString},
+      updated_at: { type: GraphQLString},
+      groups: { type: new GraphQLList(DeployGroupType) },
+      projects: { type: new GraphQLList(DeployProjectType) },
+      pipelines: { type: new GraphQLList(DeployPipelineType) },
+    }
+  });
+
+  const deployInfoSchema = new GraphQLSchema({
+    query: new GraphQLObjectType({
+      name: 'Query', 
+      fields: {
+        deployDetail: {
+          type: DeployType,
+          args: {
+            id: { type: new GraphQLNonNull(GraphQLInt) }
+          },
+          resolve: async (_parent, args, _context) => {
+            return await queryService.getDeployDetail(args.id)
+          }
+        },
+        deploy: {
+          type: DeployInfoType,
+          args: { id : { type: new GraphQLNonNull(GraphQLInt) } },
+          resolve: async (_parent, args, _context) => {
+            // Example: get all deploys and flatten their groups
+            const deploys = await queryService.getDeployInfo(args.id);
+            // Flatten all groups from all deploys
+            return deploys
+          }
+        },
+        deploys: {
+          type: new GraphQLList(DeployInfoType),
+          resolve: async (_parent, _args, _context) => {
+            // Example: get all deploys and flatten their groups
+            const deploys = await queryService.getAllDeployInfoPage(0, 50);
+            // Flatten all groups from all deploys
+            return deploys
+          }
+
+        }
+      }
+    })
+  });
+
+  router.post("/graphql", createHandler(
+    {
+      schema: deployInfoSchema,
+    }
+  ))
 
   router.get("/deploys", async (_req, res) => {
     const list = await queryService.getAllDeployInfoPage(0, 50);
