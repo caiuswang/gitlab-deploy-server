@@ -13,6 +13,7 @@ import {
 } from "./deploy.constants";
 import { IDeployService, GroupDependType, IBroadCast} from "./deploy.interface";
 import { WebSocketServer } from "ws";
+import { job } from "../../generated/prisma";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -134,10 +135,24 @@ export class GitLabDeployService implements IDeployService {
         where: { deploy_id: deployId, group_index: g.group_index },
         orderBy: { id: "asc" }
       });
+      let startPolling = false;
       for (const p of projects) {
         try {
           this.log({ deployId, projectId: p.project_id }).info("Starting project deploy");
           await this.runOneProject(gitlab, p);
+          if (!startPolling) {
+            startPolling = true;
+            (async () => {
+              this.log({ deployId }).info("Deploy polling started");
+              for (let round = 0; round < MAX_POLL_ROUNDS; round++) {
+                this.log({ deployId, round }).debug("Deploy polling round");
+                const outcome = await this.pollAndUpdateProjects(gitlab, deployId);
+                if (outcome === "fail") { await this.markDeployFailed(deployId); this.log({ deployId }).error("Deploy failed"); return; }
+                if (outcome === "success") { await this.markDeploySuccess(deployId); this.log({ deployId }).info("Deploy succeeded"); return; }
+                await sleep(POLL_INTERVAL_MS);
+              }
+            })();
+          }
         } catch (e) {
           this.log({ deployId, projectId: p.project_id, error: (e as Error).message }).error("Project deploy failed");
           await prisma.singe_project_deploy_info.update({ where: { id: p.id }, data: { status: "failed" } });
@@ -146,15 +161,6 @@ export class GitLabDeployService implements IDeployService {
         }
       }
     }
-    this.log({ deployId }).info("Deploy polling started");
-    for (let round = 0; round < MAX_POLL_ROUNDS; round++) {
-      this.log({ deployId, round }).debug("Deploy polling round");
-      const outcome = await this.pollAndUpdateProjects(gitlab, deployId);
-      if (outcome === "fail") { await this.markDeployFailed(deployId); this.log({ deployId }).error("Deploy failed"); return; }
-      if (outcome === "success") { await this.markDeploySuccess(deployId); this.log({ deployId }).info("Deploy succeeded"); return; }
-      await sleep(POLL_INTERVAL_MS);
-    }
-    await this.markDeployFailed(deployId);
   }
 
   private async runOneProject(
@@ -293,13 +299,26 @@ export class GitLabDeployService implements IDeployService {
       let allOk = true;
       for (const p of projects) {
         if (!p.pipeline_id) { allOk = false; break; }
-        const rows = await prisma.job.findMany({
+        const jobs = await<Promise<Array<job>>> prisma.job.findMany({
           where: { deploy_id: deployId, pipeline_id: p.pipeline_id, stage: { contains: stageLike } },
-          select: { status: true }
+          select: { id: true, status: true, name: true }
         });
-        if (!rows.length) { allOk = false; break; }
-        if (rows.some(r => r.status === "failed" || r.status === "canceled")) return false;
-        if (rows.some(r => r.status !== "success")) { allOk = false; break; }
+        let named_group_jobs : Map<string, job> = new Map();
+        for (const job of jobs) {
+          if (!named_group_jobs.has(job.name)) {
+            named_group_jobs.set(job.name, job);
+          } else {
+            const existJob = named_group_jobs.get(job.name);
+            if (existJob!.id < job.id) {
+              named_group_jobs.set(job.name, job);
+            }
+          }
+        }
+        if (named_group_jobs.size == 0) { allOk = false; break;}
+        for (let job of named_group_jobs.values()) {
+          if (job.status === "failed" || job.status === "canceled") return false;
+          if (job.status !== "success") { allOk = false; break; }
+        }
       }
       if (allOk) return true;
       await sleep(WAIT_DEPEND_INTERVAL_MS);
@@ -395,6 +414,7 @@ export class GitLabDeployService implements IDeployService {
 
   async markDeployStart(deployId: number) { 
       await prisma.deploy_info.update({ where: { id: deployId }, data: { status: "running" } }); 
+      createLogger({id: deployId}).info("update status to running")
   }
   async markDeploySuccess(deployId: number) { 
       await prisma.deploy_info.update({ where: { id: deployId }, data: { status: "success" } }); 
