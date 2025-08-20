@@ -24,7 +24,11 @@ export class GitLabDeployService implements IDeployService {
     this.broadCastService = broadcast;
   }
   async changeDeployGroupInfo(payload: GroupDeployChange): Promise<void> {
-    const { deploy_id, group_id, group_index, depend_group_index, depend_type, projects } = payload;
+    const { deploy_id, group_id, group_index, depend_group_index, depend_type, projects, description } = payload;
+    if (description != null) {
+      await prisma.deploy_info.update({ where: { id: deploy_id }, data: { description } });
+      createLogger({ deploy_id, description }).info("Updated deploy description");
+    }
     let newProjects: any[] = [];
     let updatedProjects: SingleProjectDeployInfo[] = [];
     let removedProjects: SingleProjectDeployInfo[] = [];
