@@ -1,4 +1,4 @@
-import { GroupDeployChange, NewFullDeploy, SingleProjectDeployInfo } from "../../models";
+import { GroupDeployChange, GroupDeployDepend, NewFullDeploy, SingleProjectDeployInfo } from "../../models";
 import { GitLabApi } from "../../gitlab";
 import { createLogger } from "../../logger";
 import { prisma } from "../../db";
@@ -34,8 +34,8 @@ export class GitLabDeployService implements IDeployService {
     let removedProjects: SingleProjectDeployInfo[] = [];
     if (projects && projects.length) {
       const projectIds = projects.map(p => p.project_id);
-      const existingProjects = await prisma.singe_project_deploy_info.findMany({
-        where: { deploy_id: deploy_id }
+      const existingProjects = await<Promise<Array<SingleProjectDeployInfo>>> prisma.singe_project_deploy_info.findMany({
+        where: { deploy_id: deploy_id, group_index: group_index }
       });
       for (const p of existingProjects) {
         if (projectIds.includes(p.project_id)) {
@@ -46,12 +46,12 @@ export class GitLabDeployService implements IDeployService {
       }
       newProjects = projects.filter(p => !existingProjects.some(ep => ep.project_id === p.project_id));
     } else {
-      removedProjects = await prisma.singe_project_deploy_info.findMany({
+      removedProjects = await<Promise<Array<SingleProjectDeployInfo>>> prisma.singe_project_deploy_info.findMany({
         where: { deploy_id: deploy_id, group_index: group_index }
       });
     }
     if (!group_id) {
-      const existGroup = await prisma.group_deploy_depend.findFirst({
+      const existGroup = await<Promise<GroupDeployDepend>> prisma.group_deploy_depend.findFirst({
         where: { deploy_id: deploy_id, group_index: group_index }
       });
       if (existGroup) {
@@ -60,7 +60,7 @@ export class GitLabDeployService implements IDeployService {
     }
     await prisma.$transaction(async (tx) => {
       if (!group_id) {
-        const newGroup = await tx.group_deploy_depend.create({
+        await tx.group_deploy_depend.create({
           data: {
             deploy_id: deploy_id,
             group_index: group_index,
